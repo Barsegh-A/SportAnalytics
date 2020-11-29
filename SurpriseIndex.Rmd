@@ -1,0 +1,114 @@
+---
+title: "Surprise Index"
+author: "Barsegh Atanyan"
+date: "11/29/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(SportsAnalytics270)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(reshape2)
+
+```
+
+```{r}
+data("f_data_sm")
+data <- f_data_sm %>%
+  select(-c("H","D", "A"))
+
+data <- data %>% drop_na()
+
+f_long <- data %>%
+  select(SEASON, COUNTRY, DATE,HOMETEAM,AWAYTEAM,FTSC) %>%
+  gather(key='flag', value = 'Team',-c(SEASON, COUNTRY, FTSC,DATE)) %>%
+  separate(FTSC, into = c('g1','g2'),sep = '-') %>%
+  mutate(scored=ifelse(flag=='HOMETEAM',as.numeric(g1),as.numeric(g2)),
+         conceded=ifelse(flag=='HOMETEAM',as.numeric(g2),as.numeric(g1)),
+        WL=ifelse(scored>conceded,'W',ifelse(scored<conceded,"L",'D')),
+        Points=ifelse(scored>conceded,3,ifelse(scored<conceded,0,1))) %>%
+    select(-c(g1,g2))
+
+
+f <- f_long %>%
+  group_by(SEASON, COUNTRY, Team, WL) %>%
+  summarise(Total_Points = sum(Points), Matches = n(), scored = sum(scored), 
+            conceded = sum(conceded)) %>%
+  group_by(SEASON, COUNTRY) %>%
+  spread(WL,Matches) %>%
+  group_by(SEASON, COUNTRY, Team) %>%
+  summarise(Scored=sum(scored), Conceded=sum(conceded),W=sum(W,na.rm = TRUE), 
+            D=sum(D,na.rm = TRUE),L=sum(L,na.rm = TRUE),Total_Points=sum(Total_Points)) %>%
+  mutate(Position = dense_rank(desc(rank(Total_Points,ties.method = "first"))),
+         Matches=D+L+W)%>%
+  arrange(Position)
+
+```
+
+
+```{r}
+
+
+data <- data %>% 
+  left_join(select(f, SEASON, COUNTRY, Team, Position), by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY", "HOMETEAM" = "Team")) %>%
+  rename(HTP = Position)
+
+data <- data %>% 
+  left_join(select(f, SEASON, COUNTRY, Team, Position), by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY", "AWAYTEAM" = "Team")) %>%
+  rename(ATP = Position)
+
+
+data <- data %>% mutate(Surprise_Points = ifelse((FTR == 'A' & HTP < ATP) | (FTR == 'H' & HTP > ATP), 2,
+                                         ifelse(FTR == 'D' , 1, 0)))
+```
+
+```{r}
+
+sp <- data %>% group_by(SEASON, COUNTRY) %>% summarize(Surprise_Points = sum(Surprise_Points))
+
+
+sp <- sp %>% left_join(f %>% group_by(SEASON, COUNTRY) %>% summarise(N = n()))
+sp <- sp %>% mutate(M = (N - 1) * N * (N + 1) / 3)
+
+sp <- sp %>% mutate(S = Surprise_Points/M)
+
+```
+
+```{r}
+HHI <- f %>% group_by(SEASON, COUNTRY) %>%
+  mutate(Perc = Total_Points / sum(Total_Points)) %>%
+  summarise(HHI = sum(Perc^2))
+
+
+HHI <- HHI %>% 
+  left_join(select(sp, SEASON, COUNTRY, S, N), by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY"))
+
+```
+
+```{r}
+
+country <- "England"
+
+ggplot(HHI %>% filter(COUNTRY == country), aes(SEASON, 1-HHI)) + geom_point() + geom_line()
+```
+
+```{r}
+
+ggplot(HHI %>% filter(COUNTRY == country), aes(SEASON, S)) + geom_point() + geom_line()
+
+```
+
+
+```{r}
+  ggplot(HHI %>% filter(COUNTRY != "Scotland"), aes(HHI, S)) + geom_point() + geom_smooth(method = lm) + facet_wrap(~COUNTRY)
+```
+
+
+
+
+
+
+
