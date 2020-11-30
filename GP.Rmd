@@ -1,0 +1,444 @@
+---
+title: "GP"
+author: ""
+date: "11/30/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Scratch 1.1
+```{r}
+library(SportsAnalytics270)
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(purrr)
+library(plotly)
+library(MASS)
+library(BradleyTerry2)
+```
+
+```{r}
+data("f_data_sm")
+
+football_long <- f_data_sm %>%
+  select(SEASON,DATE,HOMETEAM,AWAYTEAM,FTSC, COUNTRY) %>%
+  gather(key='flag', value = 'Team',-c(SEASON, FTSC,DATE, COUNTRY)) %>%
+  separate(FTSC, into = c('g1','g2'),sep = '-') %>%
+  mutate(scored=ifelse(flag=='HOMETEAM',as.numeric(g1),as.numeric(g2)),
+         conceded=ifelse(flag=='HOMETEAM',as.numeric(g2),as.numeric(g1)),
+         WL=ifelse(scored>conceded,'W',ifelse(scored<conceded,"L",'D')),
+         Points=ifelse(scored>conceded,3,ifelse(scored<conceded,0,1))) %>%
+  select(-c(g1,g2))
+```
+```{r}
+football <- football_long %>% group_by(SEASON, Team, COUNTRY) %>% 
+  summarise(total_points = sum(Points), max_points = 3*n(), 
+            total_scored = sum(scored), total_conceded = sum(conceded)) %>%
+  group_by(SEASON, COUNTRY) %>% 
+  mutate(Position = dense_rank(desc(rank(total_points, ties.method = "first")))) %>% 
+  mutate(Perc = total_points/max_points, GD = total_scored - total_conceded)
+
+football <- football %>% drop_na()
+```
+
+
+
+```{r}
+HHI <- football %>%
+  group_by(SEASON, COUNTRY) %>%
+  mutate(Perc = total_points / sum(total_points)) %>%
+  summarise(HHI = sum(Perc^2))
+
+head(HHI)
+```
+
+
+
+```{r}
+min(football$SEASON):max(football$SEASON)
+
+coefs <- data.frame()
+```
+
+
+```{r}
+league <- f_data_sm %>%
+  group_by(COUNTRY, SEASON) %>% 
+  select(SEASON, COUNTRY, HOMETEAM, AWAYTEAM, FTHG, FTAG)
+
+l1 <- data.frame(league[, c("SEASON","COUNTRY", "HOMETEAM", "AWAYTEAM", "FTHG")], Home = 1)
+l2 <- data.frame(league[, c("SEASON","COUNTRY", "AWAYTEAM", "HOMETEAM", "FTAG")], Home = 0)
+
+colnames(l1) <- c("SEASON","COUNTRY", "Team", "Opponent", "Goal", "Home")
+colnames(l2) <- c("SEASON","COUNTRY", "Team", "Opponent", "Goal", "Home")
+
+l2 <- rbind(l1, l2)
+```
+
+```{r}
+l2 <- l2 %>% group_by(SEASON, COUNTRY) %>% 
+  do(ha = exp(coefficients(glm(Goal ~ Team + Opponent + Home, data = ., family=poisson(link=log)))["Home"])) 
+l2$ha <- flatten_dbl(l2$ha)
+
+data <- left_join(HHI, l2, by=c("SEASON", "COUNTRY"))
+```
+
+
+```{r}
+ggplot(data, aes(x = -1*HHI, y = ha)) + geom_point() + geom_smooth(method = lm) # + facet_grid(~COUNTRY)
+```
+
+```{r}
+fig <- plot_ly(bt_cb, x = ~-1*HHI, y = ~ha, alpha = 3, color = ~HHI)
+fig <- fig %>% add_markers(marker = list(line = list(color = "black", width = 0.5)))
+fig <- fig %>% layout(
+  title = "HHI vs HA Drop-Down",
+  xaxis = list(domain = c(0.1, 1)),
+  yaxis = list(title = "y"),
+  updatemenus = list(
+    list(
+      y = 0.8,
+      buttons = list(
+        
+        list(method = "restyle",
+             args = list("type", "scatter"),
+             label = "Scatter"),
+        
+        list(method = "restyle",
+             args = list("type", "histogram2d"),
+             label = "2D Histogram")))
+  ))
+
+fig
+```
+
+
+
+
+```{r}
+f_bt <- f_data_sm %>% mutate(ht_w = ifelse(FTR == "H", 1,
+                                  ifelse(FTR == "D", 0.5, 0)),
+                    at_w = ifelse(FTR == "A", 1,
+                                  ifelse(FTR == "D", 0.5, 0)))
+head(f_bt)
+```
+
+```{r}
+f_bt1 <- f_bt %>%
+  mutate(HOMETEAM = as.factor(HOMETEAM),
+         AWAYTEAM = as.factor(AWAYTEAM)) %>%
+  group_by(HOMETEAM, AWAYTEAM, SEASON) #%>%
+  #mutate(ht = sum(ht_w), at=sum(at_w))
+
+head(f_bt1)
+```
+
+```{r}
+f_bt1$HOMETEAM <- data.frame(team = f_bt1$HOMETEAM, at.home = 1)
+f_bt1$AWAYTEAM <- data.frame(team = f_bt1$AWAYTEAM, at.home = 0)
+
+head(f_bt1)
+```
+
+
+
+```{r}
+f_bt1 <- f_bt1 %>% group_by(COUNTRY, SEASON)
+f_bt1 <- f_bt1 %>% do(ha = coefficients(BTm(cbind(ht_w, at_w), HOMETEAM, AWAYTEAM, formula = ~team + at.home, data = ., id="team"))["at.home"])
+
+f_bt2 <- f_bt1
+
+f_bt1$ha <- flatten_dbl(f_bt1$ha)
+
+head(f_bt1)
+head(HHI)
+```
+
+```{r}
+bt_cb <- left_join(f_bt1, HHI, by = c("COUNTRY", "SEASON"))
+head(bt_cb)
+```
+
+```{r}
+without_sct <- bt_cb %>% filter(COUNTRY != "Scotland")
+
+```
+
+
+```{r}
+ggplot(bt_cb, aes(x = ha, y = HHI)) + geom_point() + geom_smooth(method = lm) + facet_wrap(~COUNTRY, nrow = 6, ncol = 5)
+cor(without_sct$ha, without_sct$HHI)
+```
+
+
+```{r}
+ggplot(bt_cb, aes(x = ha, y = HHI)) + geom_point() + geom_smooth(method = lm)
+```
+
+
+```{r}
+fig1 <- plot_ly(bt_cb, x = ~ha, y = ~HHI, alpha = 3, color = ~HHI)
+fig1 <- fig1 %>% add_markers(marker = list(line = list(color = "black", width = 0.5)))
+fig1 <- fig1 %>% layout(
+  title = "BTM-drop down",
+  xaxis = list(domain = c(0.1, 1)),
+  yaxis = list(title = "y"),
+  updatemenus = list(
+    list(
+      y = 0.8,
+      buttons = list(
+        
+        list(method = "restyle",
+             args = list("type", "scatter"),
+             label = "Scatter"),
+        
+        list(method = "restyle",
+             args = list("type", "histogram2d"),
+             label = "2D Histogram")))
+  ))
+
+fig1
+
+```
+
+
+
+```{r}
+year <- 2017
+country <- "Portugal"
+
+unique(f_data_sm %>% filter(COUNTRY == "Belgium") %>% select(SEASON))
+
+ha <- data.frame()
+```
+
+
+
+```{r}
+for(y in 1995 : 2019){
+
+  belgium <- f_data_sm %>% filter(SEASON == y, COUNTRY == country)
+  
+  belgium <- belgium %>% filter(!(HOMETEAM == "Partick" & AWAYTEAM == "Rangers") )
+  
+  belgium$ID = -1
+  belgium$H_A = "A"
+
+  j <- 1
+  
+  
+  for(i in 1:dim(belgium)[1]){
+    k <- belgium[belgium$HOMETEAM == belgium[i, "AWAYTEAM"] & belgium$AWAYTEAM == belgium[i, "HOMETEAM"],]
+    
+    k <- k[1,]
+    
+    if(k$ID != -1){
+      belgium$ID[i] = k$ID
+      belgium$H_A[i] = "A"
+    }else{
+      belgium$ID[i] = j
+      belgium$H_A[i] = "H"
+      j <<- j + 1 
+    }
+    
+    
+  }
+  
+  
+  
+  belgium <- belgium %>% reshape(timevar = "H_A", idvar = "ID", direction = "wide", v.names = c("FTHG", "FTAG"))
+  
+  
+  belgium <- belgium %>% mutate(C = sign((FTHG.H - FTAG.H) - (FTAG.A - FTHG.A)))
+  
+  head(belgium)
+  
+  
+  
+  
+  
+ # pbeta(1/2, 53, 98)
+  
+ belgium_new <- belgium %>% select(HOMETEAM, C)
+  head(belgium_new)
+  
+  
+  colnames(belgium_new) <- c("Team", "C")
+  #belgium_new <- rbind(belgium_new, belgium_new1)
+  
+  belgium_new <- belgium_new %>% group_by(Team) %>% 
+    count(C)
+  
+  head(belgium_new)
+  
+ # reshape(belgium_new, idvar = "Team", timevar = "C", direction = "wide")
+  
+  belgium_ha <- spread(belgium_new, key = "C", value = "n")
+  colnames(belgium_ha) <- c("Team", "k_1", "k0", "k1")
+  
+  
+  belgium_ha <- belgium_ha %>% mutate(k_1 = ifelse(is.na(k_1), 0, k_1), 
+                        k0 = ifelse(is.na(k0), 0, k0),
+                        k1 = ifelse(is.na(k1), 0, k1))
+  
+  all <- sum(belgium_ha$k_1) + sum(belgium_ha$k0) + sum(belgium_ha$k1)
+  
+  
+  
+  ha_y <- data.frame(SEASON = y, ha = 1 - pbeta(1/2, sum(belgium_ha$k1)/all + 1, sum(belgium_ha$k_1)/all + 1))
+  ha <<- rbind(ha, ha_y)
+  
+}
+```
+
+
+
+
+
+
+```{r}
+belgium_ha$ha <- 1 - pbeta(1/2, belgium_ha$k1 + 1, belgium_ha$k_1 + 1)
+
+HHI <- football %>% filter(COUNTRY == country) %>% 
+  group_by(SEASON) %>%
+  mutate(Perc = total_scored / sum(total_scored)) %>%
+  summarise(HHI = sum(Perc^2))
+```
+
+```{r}
+df <- left_join(ha, HHI)  
+ggplot(df, aes(HHI, ha))  + geom_point() + geom_smooth(method = lm)
+```
+
+```{r}
+cor(df$ha, df$HHI)
+
+mean(belgium_ha$ha)
+
+```
+
+
+```{r}
+###### ha_p is the home coefficinets calculated using Poisson model
+
+ha_p <- l2 %>% filter(COUNTRY == "Scotland")
+
+ggplot(ha_p, aes(SEASON, ha)) + geom_point() + geom_line()
+```
+
+```{r}
+#yet to be completed
+fig3 <- ha_p %>%
+  plot_ly(
+    x = ~SEASON, 
+    y = ~ha,
+    type = 'scatter',
+    mode = 'lines', 
+    line = list(simplyfy = F))
+fig3 <- fig3 %>% layout(
+  xaxis = list(
+    title = "SEASON",
+    zeroline = F
+  ),
+  yaxis = list(
+    title = "ha",
+    zeroline = F
+  )
+) 
+fig3 <- fig3 %>% animation_opts(
+  frame = 100, 
+  transition = 0, 
+  redraw = FALSE
+)
+fig3 <- fig3 %>% animation_slider(
+  hide = T
+)
+fig3 <- fig3 %>% animation_button(
+  x = 1, xanchor = "right", y = 0, yanchor = "bottom"
+)
+
+
+fig3
+```
+#Entropia
+
+```{r}
+data("f_data_sm")
+data <- f_data_sm %>%
+  select(-c("H","D", "A"))
+
+data <- data %>% drop_na()
+
+f_long <- data %>%
+  select(SEASON, COUNTRY, DATE,HOMETEAM,AWAYTEAM,FTSC) %>%
+  gather(key='flag', value = 'Team',-c(SEASON, COUNTRY, FTSC,DATE)) %>%
+  separate(FTSC, into = c('g1','g2'),sep = '-') %>%
+  mutate(scored=ifelse(flag=='HOMETEAM',as.numeric(g1),as.numeric(g2)),
+         conceded=ifelse(flag=='HOMETEAM',as.numeric(g2),as.numeric(g1)),
+        WL=ifelse(scored>conceded,'W',ifelse(scored<conceded,"L",'D')),
+        Points=ifelse(scored>conceded,3,ifelse(scored<conceded,0,1))) %>%
+    select(-c(g1,g2))
+
+
+f <- f_long %>%
+  group_by(SEASON, COUNTRY, Team, WL) %>%
+  summarise(Total_Points = sum(Points), Matches = n(), scored = sum(scored), 
+            conceded = sum(conceded)) %>%
+  group_by(SEASON, COUNTRY) %>%
+  spread(WL,Matches) %>%
+  group_by(SEASON, COUNTRY, Team) %>%
+  summarise(Scored=sum(scored), Conceded=sum(conceded),W=sum(W,na.rm = TRUE), 
+            D=sum(D,na.rm = TRUE),L=sum(L,na.rm = TRUE),Total_Points=sum(Total_Points)) %>%
+  mutate(Position = dense_rank(desc(rank(Total_Points,ties.method = "first"))),
+         Matches=D+L+W)%>%
+  arrange(Position)
+
+```
+
+```{r}
+f <- f %>% mutate(Wpct = Total_Points/3/Matches, Wpct = Wpct/sum(Wpct))
+
+
+head(f) 
+```
+
+```{r}
+H <- f %>% group_by(SEASON, COUNTRY) %>% summarize(H = -sum(Wpct * log2(Wpct + 10^(-10))), n = n())
+H <- H %>% mutate(Hm = -n * 1/n * log2(1/n))
+H <- H %>% mutate(R = H / Hm)
+H
+
+```
+
+```{r}
+HHI <- f %>% filter(COUNTRY == "Portugal") %>% 
+  group_by(SEASON) %>%
+  mutate(Perc = Total_Points / sum(Total_Points)) %>%
+  summarise(HHI = sum(Perc^2))
+
+
+df <- left_join(H %>% filter(COUNTRY == "Portugal"), HHI)
+df
+
+```
+
+```{r}
+ggplot(df, aes(R, HHI)) + geom_point() + geom_smooth(method = lm) 
+
+```
+
+```{r}
+df <- left_join(H %>% filter(COUNTRY == "Spain"), ha)
+
+ggplot(df, aes(R, ha)) + geom_point() + geom_smooth(method = lm) 
+
+```
+
+```{r}
+df <- df %>% drop_na()
+cor(df$R, df$ha)
+```
+
