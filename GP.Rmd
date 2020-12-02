@@ -58,9 +58,7 @@ f <- f_long %>%
          Matches=D+L+W)%>%
   arrange(Position)
 ```
-```{r}
-head(football)
-```
+
 
 # Combined Measure of Home Team Advantage
 
@@ -110,22 +108,22 @@ f_bt1$AWAYTEAM <- data.frame(team = f_bt1$AWAYTEAM, at.home = 0)
 
 
 ```{r}
-# f_bt1 <- f_bt1 %>% group_by(COUNTRY, SEASON)
-# f_bt1 <- f_bt1 %>% do(ha = coefficients(BTm(cbind(ht_w, at_w), HOMETEAM, AWAYTEAM, formula = ~team + at.home, data = ., id="team"))["at.home"])
-# 
-# f_bt2 <- f_bt1
-# 
-# f_bt1$ha <- flatten_dbl(f_bt1$ha)
-# 
-# head(f_bt1)
+f_bt1 <- f_bt1 %>% group_by(COUNTRY, SEASON)
+f_bt1 <- f_bt1 %>% do(ha = coefficients(BTm(cbind(ht_w, at_w), HOMETEAM, AWAYTEAM, formula = ~team + at.home, data = ., id="team"))["at.home"])
+
+f_bt2 <- f_bt1
+
+f_bt1$ha <- flatten_dbl(f_bt1$ha)
+
+head(f_bt1)
 ```
 ```{r}
-# f_bt1 <- f_bt1 %>% rename("ha_bt" = "ha")
+f_bt1 <- f_bt1 %>% rename("ha_bt" = "ha")
 ```
 
 ```{r}
-# cb_ha <- left_join(cb_ha, f_bt1, by = c("COUNTRY", "SEASON"))
-# head(cb_ha)
+cb_ha <- left_join(cb_ha, f_bt1, by = c("COUNTRY", "SEASON"))
+head(cb_ha)
 ```
 
 # Poisson Model based Home Team Advantage
@@ -254,203 +252,72 @@ head(adj_HHI)
 cb_ha <- left_join(cb_ha, adj_HHI, by = c("COUNTRY", "SEASON"))
 head(cb_ha)
 ```
+```{r}
+cb_ha <- cb_ha %>% dplyr::select(-c(cb_hhi.x, cb_hhi.y, cb_ns.x, cb_ns.y))
+```
 
 
 ```{r echo=TRUE, include=TRUE}
-# fig <- plot_ly(cb_ha, x = ~-1*cb_hhi, y = ~ha_pois, alpha = 3, color = ~cb_hhi)
-# fig <- fig %>% add_markers(marker = list(line = list(color = "black", width = 0.5)))
-# fig <- fig %>% layout(
-#   title = "HHI vs HA Drop-Down",
-#   xaxis = list(domain = c(0.1, 1)),
-#   yaxis = list(title = "y"),
-#   updatemenus = list(
-#     list(
-#       y = 0.8,
-#       buttons = list(
-# 
-#         list(method = "restyle",
-#              args = list("type", "scatter"),
-#              label = "Scatter"),
-# 
-#         list(method = "restyle",
-#              args = list("type", "histogram2d"),
-#              label = "2D Histogram")))
-#   ))
-# 
-# fig
-# ```
-# 
-# ```{r}
-# ggplot(bt_cb, aes(x = ha, y = HHI)) + geom_point() + geom_smooth(method = lm) + facet_wrap(~COUNTRY, nrow = 6, ncol = 5)
-# cor(without_sct$ha, without_sct$HHI)
-# ```
-# 
-# 
-# ```{r}
-# ggplot(bt_cb, aes(x = ha, y = HHI)) + geom_point() + geom_smooth(method = lm)
-# ```
-# 
-# 
-# ```{r}
-# fig1 <- plot_ly(bt_cb, x = ~ha, y = ~HHI, alpha = 3, color = ~HHI)
-# fig1 <- fig1 %>% add_markers(marker = list(line = list(color = "black", width = 0.5)))
-# fig1 <- fig1 %>% layout(
-#   title = "BTM-drop down",
-#   xaxis = list(domain = c(0.1, 1)),
-#   yaxis = list(title = "y"),
-#   updatemenus = list(
-#     list(
-#       y = 0.8,
-#       buttons = list(
-# 
-#         list(method = "restyle",
-#              args = list("type", "scatter"),
-#              label = "Scatter"),
-# 
-#         list(method = "restyle",
-#              args = list("type", "histogram2d"),
-#              label = "2D Histogram")))
-#   ))
-# 
-# fig1
-# 
-# ```
-# 
-# 
-# ```{r}
-# fig2 <- plot_ly(df, x = ~HHI, y = ~ha, alpha = 3, color = ~HHI)
-# fig2 <- fig2 %>% add_markers(marker = list(line = list(color = "black", width = 0.5)))
-# fig2 <- fig2 %>% layout(
-#   title = "HHI,ha-drop down",
-#   xaxis = list(domain = c(0.1, 1)),
-#   yaxis = list(title = "y"),
-#   updatemenus = list(
-#     list(
-#       y = 0.8,
-#       buttons = list(
-# 
-#         list(method = "restyle",
-#              args = list("type", "scatter"),
-#              label = "Scatter"),
-# 
-#         list(method = "restyle",
-#              args = list("type", "histogram2d"),
-#              label = "2D Histogram")))
-#   ))
-# 
-# fig2
-# ```
-# 
-# 
-# ```{r}
-# #yet to be completed
-# fig3 <- ha_p %>%
-#   plot_ly(
-#     x = ~SEASON,
-#     y = ~ha,
-#     type = 'scatter',
-#     mode = 'lines',
-#     line = list(simplyfy = F))
-# fig3 <- fig3 %>% layout(
-#   xaxis = list(
-#     title = "SEASON",
-#     zeroline = F
-#   ),
-#   yaxis = list(
-#     title = "ha",
-#     zeroline = F
-#   )
-# )
-# fig3 <- fig3 %>% animation_opts(
-#   frame = 100,
-#   transition = 0,
-#   redraw = FALSE
-# )
-# fig3 <- fig3 %>% animation_slider(
-#   hide = T
-# )
-# 
-# 
-# fig3
-# ```
-# 
-# 
-# 
-# ```{r}
-#  ggplot(df, aes(R, HHI)) + geom_point() + geom_smooth(method = lm)
-# 
-# ```
-# 
-# ```{r}
-# fig4 <- plot_ly(df, x = ~R, y = ~HHI, alpha = 3, color = ~R)
-# fig4 <- fig4 %>% add_markers(marker = list(line = list(color = "black", width = 0.5)))
-# fig4 <- fig4 %>% layout(
-#   title = "R,HHI-drop down",
-#   xaxis = list(domain = c(0.1, 1)),
-#   yaxis = list(title = "y"),
-#   updatemenus = list(
-#     list(
-#       y = 0.8,
-#       buttons = list(
-# 
-#         list(method = "restyle",
-#              args = list("type", "scatter"),
-#              label = "Scatter"),
-# 
-#         list(method = "restyle",
-#              args = list("type", "histogram2d"),
-#              label = "2D Histogram")))
-#   ))
-# 
-# fig4
-# ```
-# 
-# ```{r}
-# df <- left_join(H %>% filter(COUNTRY == "Spain"), ha)
-# 
-# ggplot(df, aes(R, ha)) + geom_point() + geom_smooth(method = lm)
-# 
-# ```
-# 
-# ```{r}
-# fig5 <- plot_ly(df, x = ~R, y = ~ha, alpha = 3, color = ~R)
-# fig5 <- fig5 %>% add_markers(marker = list(line = list(color = "black", width = 0.5)))
-# fig5 <- fig5 %>% layout(
-#   title = "R,HHI-drop down",
-#   xaxis = list(domain = c(0.1, 1)),
-#   yaxis = list(title = "y"),
-#   updatemenus = list(
-#     list(
-#       y = 0.8,
-#       buttons = list(
-# 
-#         list(method = "restyle",
-#              args = list("type", "scatter"),
-#              label = "Scatter"),
-# 
-#         list(method = "restyle",
-#              args = list("type", "histogram2d"),
-#              label = "2D Histogram")))
-#   ))
-# 
-# fig5
-# ```
-# 
-# 
-# ```{r}
-# country <- "England"
-# fig6<- ggplot(HHI %>% filter(COUNTRY == country), aes(SEASON, 1-HHI)) + geom_point() + geom_line()
-# ```
-# ```{r}
-# fig6 <- ggplotly(fig6)
-# ```
-# 
-# 
-# ```{r}
-# ggplot(HHI %>% filter(COUNTRY == country), aes(SEASON, S)) + geom_point() + geom_line()
-# ```
-# 
-# 
-# ```{r}
-# ggplot(HHI %>% filter(COUNTRY != "Scotland"), aes(HHI, S)) + geom_point() + geom_smooth(method = lm) + facet_wrap(~COUNTRY)
+fig <- plot_ly(cb_ha, x = ~-1*cb_hhi, y = ~ha_pois, alpha = 3)
+fig <- fig %>% add_markers(marker = list(line = list(color = "black", width = 0.5)))
+fig <- fig %>% layout(
+  title = "HHI vs HA Drop-Down",
+  yaxis = list(title = "y"),
+  updatemenus = list(
+    list(
+      y = 0.8,
+      buttons = list(
+        list(method = "restyle",
+             args = list( "y", list(~ha_pois)),
+             label = "HA with Pois"),
+
+        list(method = "restyle",
+             args = list("y",list(~ha_bt)),
+             label = "HA with BT"),
+        
+        list(method = "restyle",
+             args = list("y",list(~ha_c)),
+             label = "HA with C")
+        
+        )),
+      
+      list(
+        y = 0.9,
+        buttons = list(
+  
+          list(method = "restyle",
+               args = list( "x", list(~cb_hhi)),
+               label = "CB with Adj HHI"),
+  
+          list(method = "restyle",
+               args = list("x",list(~cb_entropy)),
+               label = "CB with Entropy"),
+          
+          list(method = "restyle",
+               args = list( "x", list(~cb_s)),
+               label = "CB with Surprise Index"),
+  
+          list(method = "restyle",
+               args = list("x",list(~cb_gini)),
+               label = "CB with Gini coef"),
+          
+          list(method = "restyle",
+               args = list( "x", list(~cb_ns)),
+               label = "CB with Noll-Scully")
+          
+          )
+      
+      )
+    
+    )
+  )
+
+fig
 ```
+
+
+
+
+
+
+
