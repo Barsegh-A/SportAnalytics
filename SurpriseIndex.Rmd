@@ -63,6 +63,8 @@ data <- data %>%
 
 data <- data %>% mutate(Surprise_Points = ifelse((FTR == 'A' & HTP < ATP) | (FTR == 'H' & HTP > ATP), 2,
                                          ifelse(FTR == 'D' , 1, 0)))
+
+data <- data %>% mutate(Surprise_Points = Surprise_Points*abs(HTP-ATP))
 ```
 
 ```{r}
@@ -78,13 +80,13 @@ sp <- sp %>% mutate(S = Surprise_Points/M)
 ```
 
 ```{r}
-HHI <- f %>% group_by(SEASON, COUNTRY) %>%
-  mutate(Perc = Total_Points / sum(Total_Points)) %>%
-  summarise(HHI = sum(Perc^2))
+CB <- f %>% group_by(SEASON, COUNTRY) %>%
+  mutate(Perc = Total_Points / sum(Total_Points) ) %>%
+  summarise(N = n(), id_s = 0.5/sqrt(N),  HHI = sum(Perc^2) - 1/N, NS = sd(Perc)/id_s)
 
 
-HHI <- HHI %>% 
-  left_join(select(sp, SEASON, COUNTRY, S, N), by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY"))
+CB <- CB %>% 
+  left_join(select(sp, SEASON, COUNTRY, S), by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY"))
 
 ```
 
@@ -92,18 +94,18 @@ HHI <- HHI %>%
 
 country <- "England"
 
-ggplot(HHI %>% filter(COUNTRY == country), aes(SEASON, 1-HHI)) + geom_point() + geom_line()
+ggplot(CB %>% filter(COUNTRY == country), aes(SEASON, 1-HHI)) + geom_point() + geom_line()
 ```
 
 ```{r}
 
-ggplot(HHI %>% filter(COUNTRY == country), aes(SEASON, S)) + geom_point() + geom_line()
+ggplot(CB %>% filter(COUNTRY == country), aes(SEASON, S)) + geom_point() + geom_line()
 
 ```
 
 
 ```{r}
-  ggplot(HHI %>% filter(COUNTRY != "Scotland"), aes(HHI, S)) + geom_point() + geom_smooth(method = lm) + facet_wrap(~COUNTRY)
+ggplot(CB , aes(HHI, S)) + geom_point()  + facet_wrap(~COUNTRY)
 ```
 
 
