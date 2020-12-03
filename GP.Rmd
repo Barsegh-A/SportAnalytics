@@ -26,17 +26,57 @@ library("SportsAnalytics270")
 
 ```
 
-# Objective
+```{r}
+
+addData <- function(country, league, startYear, endYear){
+  combined <- data.frame()
+  for(y in startYear:endYear){
+    path <- paste0('data/', league, '/', league, y, '.csv')
+    data <- read.csv(path)  
+    data <- data %>% dplyr::select(HomeTeam, AwayTeam, FTHG, FTAG, FTR) %>% 
+      rename(HOMETEAM = HomeTeam, AWAYTEAM = AwayTeam) %>% 
+      mutate(SEASON = y, COUNTRY = country, LEAGUE = league, FTSC = paste0(FTHG, "-", FTAG), FTTG = FTHG + FTAG)
+    
+    combined <- rbind(combined, data)  
+  }
+  
+  return(combined)
+}
+
+```
+
 
 ```{r}
-data <- f_data_sm %>%
-  dplyr::select(-c("H","D", "A"))
+data <- f_data_sm %>% dplyr::select(-c("H", "D", "A", "DATE")) 
+
+championship <- addData("England", "Championship", 2005, 2020)
+data <- rbind(data, championship)
+
+bundesliga2 <- addData("Germany", "Bundesliga2", 1994, 2020)
+data <- rbind(data, bundesliga2)
+
+serieB <- addData("Italy", "SerieB", 1998, 2018)
+data <- rbind(data, serieB)
+
+segunda <- addData("Spain", "Segunda", 1997, 2020)
+data <- rbind(data, segunda)
+
+ligue2 <- addData("France", "Ligue2", 1997, 2020)
+data <- rbind(data, ligue2)
 
 data <- data %>% drop_na()
 
+```
+
+
+
+# Objective
+
+```{r}
+
 f_long <- data %>%
-  dplyr::select(SEASON, COUNTRY, DATE,HOMETEAM,AWAYTEAM,FTSC) %>%
-  gather(key='flag', value = 'Team',-c(SEASON, COUNTRY, FTSC,DATE)) %>%
+  dplyr::select(SEASON, COUNTRY, LEAGUE, HOMETEAM,AWAYTEAM,FTSC) %>%
+  gather(key='flag', value = 'Team',-c(SEASON, COUNTRY, LEAGUE, FTSC)) %>%
   separate(FTSC, into = c('g1','g2'),sep = '-') %>%
   mutate(scored=ifelse(flag=='HOMETEAM',as.numeric(g1),as.numeric(g2)),
          conceded=ifelse(flag=='HOMETEAM',as.numeric(g2),as.numeric(g1)),
@@ -46,36 +86,38 @@ f_long <- data %>%
 
 
 f <- f_long %>%
-  group_by(SEASON, COUNTRY, Team, WL) %>%
+  group_by(SEASON, COUNTRY, LEAGUE, Team, WL) %>%
   summarise(Total_Points = sum(Points), Matches = n(), scored = sum(scored),
             conceded = sum(conceded)) %>%
-  group_by(SEASON, COUNTRY) %>%
+  group_by(SEASON, COUNTRY, LEAGUE) %>%
   spread(WL,Matches) %>%
-  group_by(SEASON, COUNTRY, Team) %>%
+  group_by(SEASON, COUNTRY, LEAGUE, Team) %>%
   summarise(Scored=sum(scored), Conceded=sum(conceded),W=sum(W,na.rm = TRUE),
             D=sum(D,na.rm = TRUE),L=sum(L,na.rm = TRUE),Total_Points=sum(Total_Points)) %>%
   mutate(Position = dense_rank(desc(rank(Total_Points,ties.method = "first"))),
          Matches=D+L+W)%>%
   arrange(Position)
+
+f
 ```
 
 
 # Combined Measure of Home Team Advantage
 
 ```{r}
-df <- f_data_sm %>% dplyr::select(SEASON, COUNTRY, HOMETEAM, AWAYTEAM, FTHG, FTAG) %>%
+df <- data %>% dplyr::select(SEASON, COUNTRY, LEAGUE, HOMETEAM, AWAYTEAM, FTHG, FTAG) %>%
   mutate(HW = 1)
-df2 <- df %>% mutate(team1 = AWAYTEAM, team2 = HOMETEAM, HW = 0) %>% dplyr::select(SEASON, COUNTRY, team1, team2, FTHG, FTAG, HW)
+df2 <- df %>% mutate(team1 = AWAYTEAM, team2 = HOMETEAM, HW = 0) %>% dplyr::select(SEASON, COUNTRY, LEAGUE, team1, team2, FTHG, FTAG, HW)
 df <-  df %>% rename(team1 = HOMETEAM , team2 = AWAYTEAM)
 
-df4 <- left_join(df, df2, by=c("SEASON", "COUNTRY","team1", "team2"))
+df4 <- left_join(df, df2, by=c("SEASON", "COUNTRY", "LEAGUE", "team1", "team2"))
 head(df4)
 
 ```
 ```{r}
-df4 <- df4 %>% mutate(C = sign((FTHG.x - FTAG.x) - (FTAG.y - FTHG.y))) %>% dplyr::select(SEASON, COUNTRY, team1, team2, C)
-df4 <- df4 %>% group_by(SEASON, COUNTRY, C) %>% summarise(count=n()) %>% drop_na() %>% spread(key = "C", value = "count")
-colnames(df4) <- c("SEASON", "COUNTRY", "k_1", "k0", "k1")
+df4 <- df4 %>% mutate(C = sign((FTHG.x - FTAG.x) - (FTAG.y - FTHG.y))) %>% dplyr::select(SEASON, COUNTRY, LEAGUE, team1, team2, C)
+df4 <- df4 %>% group_by(SEASON, COUNTRY, LEAGUE, C) %>% summarise(count=n()) %>% drop_na() %>% spread(key = "C", value = "count")
+colnames(df4) <- c("SEASON", "COUNTRY", "LEAGUE", "k_1", "k0", "k1")
 
 ha_c <- df4 %>% mutate(k_1 = ifelse(is.na(k_1), 0, k_1),
                       k0 = ifelse(is.na(k0), 0, k0),
@@ -83,72 +125,72 @@ ha_c <- df4 %>% mutate(k_1 = ifelse(is.na(k_1), 0, k_1),
 
 ```
 ```{r}
-cb_ha <- ha_c %>% dplyr::select(SEASON, COUNTRY, ha_c)
+cb_ha <- ha_c %>% dplyr::select(SEASON, COUNTRY, LEAGUE, ha_c)
 ```
 
 # Bradley-Terry based Home Team Advantage
 
 ```{r}
-f_bt <- f_data_sm %>% mutate(ht_w = ifelse(FTR == "H", 1,
-                                  ifelse(FTR == "D", 0.5, 0)),
-                             at_w = ifelse(FTR == "A", 1,
-                                  ifelse(FTR == "D", 0.5, 0)))
+# f_bt <- data %>% mutate(ht_w = ifelse(FTR == "H", 1,
+#                                   ifelse(FTR == "D", 0.5, 0)),
+#                              at_w = ifelse(FTR == "A", 1,
+#                                   ifelse(FTR == "D", 0.5, 0)))
 ```
 
 ```{r}
-f_bt1 <- f_bt %>%
-  mutate(HOMETEAM = as.factor(HOMETEAM),
-         AWAYTEAM = as.factor(AWAYTEAM)) %>%
-  group_by(HOMETEAM, AWAYTEAM, SEASON)
-
-f_bt1$HOMETEAM <- data.frame(team = f_bt1$HOMETEAM, at.home = 1)
-f_bt1$AWAYTEAM <- data.frame(team = f_bt1$AWAYTEAM, at.home = 0)
+# f_bt1 <- f_bt %>%
+#   mutate(HOMETEAM = as.factor(HOMETEAM),
+#          AWAYTEAM = as.factor(AWAYTEAM)) %>%
+#   group_by(HOMETEAM, AWAYTEAM, SEASON)
+# 
+# f_bt1$HOMETEAM <- data.frame(team = f_bt1$HOMETEAM, at.home = 1)
+# f_bt1$AWAYTEAM <- data.frame(team = f_bt1$AWAYTEAM, at.home = 0)
 
 ```
 
 
 ```{r}
-f_bt1 <- f_bt1 %>% group_by(COUNTRY, SEASON)
-f_bt1 <- f_bt1 %>% do(ha = coefficients(BTm(cbind(ht_w, at_w), HOMETEAM, AWAYTEAM, formula = ~team + at.home, data = ., id="team"))["at.home"])
-
-f_bt2 <- f_bt1
-
-f_bt1$ha <- flatten_dbl(f_bt1$ha)
-
-head(f_bt1)
+# f_bt1 <- f_bt1 %>% group_by(SEASON, COUNTRY, LEAGUE)
+# f_bt1 <- f_bt1 %>% do(ha = coefficients(BTm(cbind(ht_w, at_w), HOMETEAM, AWAYTEAM, formula = ~team + at.home, data = ., id="team"))["at.home"])
+# 
+# f_bt2 <- f_bt1
+# 
+# f_bt1$ha <- flatten_dbl(f_bt1$ha)
+# 
+# head(f_bt1)
 ```
 ```{r}
-f_bt1 <- f_bt1 %>% rename("ha_bt" = "ha")
+# f_bt1 <- f_bt1 %>% rename("ha_bt" = "ha")
 ```
 
 ```{r}
-cb_ha <- left_join(cb_ha, f_bt1, by = c("COUNTRY", "SEASON"))
-head(cb_ha)
+# cb_ha <- left_join(cb_ha, f_bt1, by = c("SEASON", "COUNTRY", "LEAGUE"))
+# head(cb_ha)
 ```
 
 # Poisson Model based Home Team Advantage
 ```{r}
-league <- f_data_sm %>%
-  group_by(COUNTRY, SEASON) %>%
-  dplyr::select(SEASON, COUNTRY, HOMETEAM, AWAYTEAM, FTHG, FTAG)
+league <- data %>%
+  group_by(COUNTRY, SEASON, LEAGUE) %>%
+  dplyr::select(SEASON, COUNTRY, LEAGUE, HOMETEAM, AWAYTEAM, FTHG, FTAG)
 
-l1 <- data.frame(league[, c("SEASON","COUNTRY", "HOMETEAM", "AWAYTEAM", "FTHG")], Home = 1)
-l2 <- data.frame(league[, c("SEASON","COUNTRY", "AWAYTEAM", "HOMETEAM", "FTAG")], Home = 0)
+l1 <- data.frame(league[, c("SEASON","COUNTRY", "LEAGUE", "HOMETEAM", "AWAYTEAM", "FTHG")], Home = 1)
+l2 <- data.frame(league[, c("SEASON","COUNTRY", "LEAGUE", "AWAYTEAM", "HOMETEAM", "FTAG")], Home = 0)
 
-colnames(l1) <- c("SEASON","COUNTRY", "Team", "Opponent", "Goal", "Home")
-colnames(l2) <- c("SEASON","COUNTRY", "Team", "Opponent", "Goal", "Home")
+colnames(l1) <- c("SEASON","COUNTRY", "LEAGUE", "Team", "Opponent", "Goal", "Home")
+colnames(l2) <- c("SEASON","COUNTRY", "LEAGUE", "Team", "Opponent", "Goal", "Home")
 
 l2 <- rbind(l1, l2)
 ```
 
 ```{r}
-l2 <- l2 %>% group_by(SEASON, COUNTRY) %>%
+l2 <- l2 %>% group_by(SEASON, COUNTRY, LEAGUE) %>%
   do(ha_pois = exp(coefficients(glm(Goal ~ Team + Opponent + Home, data = ., family=poisson(link=log)))["Home"]))
 l2$ha_pois <- flatten_dbl(l2$ha_pois)
 ```
 
 ```{r}
-cb_ha <- left_join(cb_ha, l2, by = c("COUNTRY", "SEASON"))
+cb_ha <- left_join(cb_ha, l2, by = c("COUNTRY", "SEASON", "LEAGUE"))
 head(cb_ha)
 ```
 
@@ -156,7 +198,7 @@ head(cb_ha)
 # ggplot(cb_ha, aes(ha_pois, ha_bt))+geom_point()+facet_wrap(~COUNTRY, nrow=3)
 ```
 ```{r echo=TRUE, include=TRUE}
-ggplot(cb_ha, aes(ha_pois, ha_c))+geom_point()+facet_wrap(~COUNTRY, nrow=3)
+ggplot(cb_ha, aes(ha_pois, ha_c))+geom_point()+facet_wrap(~LEAGUE, nrow=3)
 ```
 ```{r}
 # ggplot(cb_ha, aes(ha_bt, ha_c))+geom_point()+facet_wrap(~COUNTRY, nrow=3)
@@ -170,44 +212,46 @@ f <- f %>% mutate(Wpct = Total_Points/3/Matches, Wpct = Wpct/sum(Wpct))
 ```
 
 ```{r}
-H <- f %>% group_by(SEASON, COUNTRY) %>% summarize(H = -sum(Wpct * log2(Wpct + 10^(-10))), n = n())
+H <- f %>% group_by(SEASON, COUNTRY, LEAGUE) %>% summarize(H = -sum(Wpct * log2(Wpct + 10^(-10))), n = n())
 H <- H %>% mutate(Hm = -n * 1/n * log2(1/n))
-H <- H %>% mutate(cb_entropy = H / Hm) %>% dplyr::select(SEASON, COUNTRY, cb_entropy)
+H <- H %>% mutate(cb_entropy = H / Hm) %>% dplyr::select(SEASON, COUNTRY, LEAGUE, cb_entropy)
 H
 
 ```
 ```{r}
-cb_ha <- left_join(cb_ha, H, by = c("COUNTRY", "SEASON"))
+cb_ha <- left_join(cb_ha, H, by = c("COUNTRY", "SEASON", "LEAGUE"))
 head(cb_ha)
 ```
 
 # Surprise Indices
 
 ```{r}
-data <- f_data_sm %>% 
-  left_join(dplyr::select(f, SEASON, COUNTRY, Team, Position), by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY", "HOMETEAM" = "Team")) %>%
+data_s <- data %>% 
+  left_join(dplyr::select(f, SEASON, COUNTRY, LEAGUE, Team, Position), 
+            by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY", "LEAGUE" = "LEAGUE", "HOMETEAM" = "Team")) %>%
   rename(HTP = Position)
 
-data <- data %>% 
-  left_join(dplyr::select(f, SEASON, COUNTRY, Team, Position), by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY", "AWAYTEAM" = "Team")) %>%
+data_s <- data_s %>% 
+  left_join(dplyr::select(f, SEASON, COUNTRY, LEAGUE, Team, Position), 
+            by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY", "LEAGUE" = "LEAGUE", "AWAYTEAM" = "Team")) %>%
   rename(ATP = Position)
 
 
-data <- data %>% mutate(Surprise_Points = ifelse((FTR == 'A' & HTP < ATP) | (FTR == 'H' & HTP > ATP), 2,
+data_s <- data_s %>% mutate(Surprise_Points = ifelse((FTR == 'A' & HTP < ATP) | (FTR == 'H' & HTP > ATP), 2,
                                          ifelse(FTR == 'D' , 1, 0)))
 
-data <- data %>% mutate(Surprise_Points = Surprise_Points*abs(HTP-ATP))
+data_s <- data_s %>% mutate(Surprise_Points = Surprise_Points*abs(HTP-ATP))
 ```
 
 ```{r}
 
-sp <- data %>% group_by(SEASON, COUNTRY) %>% summarize(Surprise_Points = sum(Surprise_Points))
+sp <- data_s %>% group_by(SEASON, COUNTRY, LEAGUE) %>% summarize(Surprise_Points = sum(Surprise_Points))
 
 
-sp <- sp %>% left_join(f %>% group_by(SEASON, COUNTRY) %>% summarise(N = n()))
+sp <- sp %>% left_join(f %>% group_by(SEASON, COUNTRY, LEAGUE) %>% summarise(N = n()))
 sp <- sp %>% mutate(M = (N - 1) * N * (N + 1) / 3)
 
-sp <- sp %>% mutate(cb_s = Surprise_Points/M) %>% dplyr::select(SEASON, COUNTRY, cb_s)
+sp <- sp %>% mutate(cb_s = Surprise_Points/M) %>% dplyr::select(SEASON, COUNTRY, LEAGUE, cb_s)
 
 ```
 ```{r}
@@ -215,23 +259,23 @@ head(sp)
 ```
 
 ```{r}
-cb_ha <- left_join(cb_ha, sp, by = c("COUNTRY", "SEASON"))
+cb_ha <- left_join(cb_ha, sp, by = c("COUNTRY", "SEASON", "LEAGUE"))
 head(cb_ha)
 ```
 
 # Gini Competitive Balance
 ```{r}
-Gini <- f %>% group_by(SEASON, COUNTRY) %>% summarize(cb_gini = gini(Wpct))
+Gini <- f %>% group_by(SEASON, COUNTRY, LEAGUE) %>% summarize(cb_gini = gini(Wpct))
 Gini
 ```
 
 ```{r}
-cb_ha <- left_join(cb_ha, Gini, by = c("COUNTRY", "SEASON"))
+cb_ha <- left_join(cb_ha, Gini, by = c("COUNTRY", "SEASON", "LEAGUE"))
 head(cb_ha)
 ```
 
 ```{r}
-ggplot(cb_ha, aes(cb_gini, cb_s))+geom_point()+facet_wrap(~COUNTRY, nrow=3)
+ggplot(cb_ha, aes(cb_gini, cb_s))+geom_point()+facet_wrap(~LEAGUE, nrow=3)
 ```
 
 # Calculating HHI and Noll-Scully
@@ -241,7 +285,7 @@ head(f)
 
 ```{r}
 adj_HHI <- f %>%
-  group_by(SEASON, COUNTRY) %>%
+  group_by(SEASON, COUNTRY, LEAGUE) %>%
   mutate(Perc = Wpct / sum(Wpct)) %>%
   summarise(id_s = 0.5/sqrt(n()),  cb_hhi = sum(Perc^2)-1/n(), cb_ns = sd(Perc)/id_s) %>% dplyr::select(-id_s)
 
@@ -249,11 +293,8 @@ head(adj_HHI)
 ```
 
 ```{r}
-cb_ha <- left_join(cb_ha, adj_HHI, by = c("COUNTRY", "SEASON"))
+cb_ha <- left_join(cb_ha, adj_HHI, by = c("COUNTRY", "SEASON", "LEAGUE"))
 head(cb_ha)
-```
-```{r}
-cb_ha <- cb_ha %>% dplyr::select(-c(cb_hhi.x, cb_hhi.y, cb_ns.x, cb_ns.y))
 ```
 
 
@@ -271,9 +312,9 @@ fig <- fig %>% layout(
              args = list( "y", list(~ha_pois)),
              label = "HA with Pois"),
 
-        list(method = "restyle",
-             args = list("y",list(~ha_bt)),
-             label = "HA with BT"),
+        #list(method = "restyle",
+         #    args = list("y",list(~ha_bt)),
+          #   label = "HA with BT"),
         
         list(method = "restyle",
              args = list("y",list(~ha_c)),
