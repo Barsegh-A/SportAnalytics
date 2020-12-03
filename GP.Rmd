@@ -14,7 +14,7 @@ knitr::opts_chunk$set(include=F, error=F, warning=F)
 ```
 
 ```{r}
-libs<-c("caret","tidyr", "ggplot2", "knitr", "dplyr", "purrr", "plotly", "MASS", "BradleyTerry2", "devtools", "reldist", "shiny")
+libs<-c("caret","tidyr", "ggplot2", "knitr", "dplyr", "purrr", "MASS", "BradleyTerry2", "devtools", "reldist", "shiny")
 #load libs, install missing libs
 load_libraries<-function(libs){
   new_libs <- libs[!(libs %in% installed.packages()[,"Package"])]
@@ -312,4 +312,36 @@ renderPlot({
 ```
 
 
+```{r include=T, echo=F}
+countries <- c("England", "Italy", "Spain", "Germany", "France")
+selectInput(
+  'breaks', label = 'League',
+  choices = countries, selected = "England"
+)
+selectInput(
+  'metric', label = 'Metric',
+  choices = c(grep("^ha", colnames(cb_ha), value=T), grep("^cb", colnames(cb_ha), value=T)) , selected = "ha_pois"
+)
+renderPlot({
+  d <- cb_ha %>% filter(COUNTRY == (input$breaks))
+  leagues <- unique(d$LEAGUE)
+
+  d1 <- d %>% filter(LEAGUE == leagues[1])
+  d2 <- d %>% filter(LEAGUE == leagues[2])
+
+  from <- min(d2$SEASON)
+  to <- max(d1$SEASON)
+
+  d1 <- d1 %>% filter(SEASON >= from)
+  d2 <- d2 %>% filter(SEASON <= to)
+  ggplot() +
+    geom_point(data = d, aes_string(x = "SEASON", y = (input$metric))) +
+      geom_line(data = d, aes_string(x = "SEASON", y = (input$metric), color = "LEAGUE")) +
+    geom_point(data = d, aes_string(x = "SEASON", y = (input$metric))) +
+      geom_line(data = d, aes_string(x = "SEASON", y = (input$metric), color = "LEAGUE")) +
+    labs(x = "Season",
+         y = "Home Team Advantage",
+         title = "Home Team Advatage per Season by League")
+})
+```
 
