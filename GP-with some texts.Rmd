@@ -1,0 +1,331 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+title: "group 4"
+author: "Name"
+toc: yes 
+toc_depth: '3'
+---
+
+```{r setup, include=FALSE, error=FALSE, echo=FALSE}
+knitr::opts_chunk$set(include=FALSE, error=FALSE, echo=TRUE)
+```
+
+```{r}
+libs<-c("caret","tidyr", "ggplot2", "knitr", "dplyr", "purrr", "plotly", "MASS", "BradleyTerry2", "devtools", "reldist")
+#load libs, install missing libs
+load_libraries<-function(libs){
+  new_libs <- libs[!(libs %in% installed.packages()[,"Package"])]
+  if(length(new_libs)>0) {install.packages(new_libs)}
+  lapply(libs, library, character.only = TRUE)
+} 
+load_libraries(libs)
+install_github("HABET/CSE270")
+library("SportsAnalytics270")
+```
+
+# Objective
+  Our objective for this group project is to see the relationship between competitive balance and home team advantage. What is the correlation between these two? To answer this question, we decided to apply several used methods both for competitive balance and home team advantage to suffice our question.
+  
+  Let us start off by briefly introducing the main idea behind competitive balance and home team advantage. Competitive balance implies that each team in any given sport or not, enjoys the same probability of outcome to win in each game. So, it refers to the competitiveness among the players in a given sport, which in our case is football. 
+  Home team advantage is the idea that describes the benefits of home teams over visiting teams. It basically implies that if two competitors have the same abilities(or not), those who play in their field have some sort of advantage over the other. The factors of this might be the fans supporting the home team more, the bias of referees, psychological or physiological advantages of playing in a familiar setting, and so on.
+  
+  We calculated everything using football data on several countries and for each season.
+  
+  Why do we want to find a correlation between the two? It is easy, because it is interesting! It is interesting because we want to see if the competitiveness of a team contributes or has any relationship with the advantage.
+           
+
+  
+
+```{r}
+data <- f_data_sm %>%
+  dplyr::select(-c("H","D", "A"))
+data <- data %>% drop_na()
+f_long <- data %>%
+  dplyr::select(SEASON, COUNTRY, DATE,HOMETEAM,AWAYTEAM,FTSC) %>%
+  gather(key='flag', value = 'Team',-c(SEASON, COUNTRY, FTSC,DATE)) %>%
+  separate(FTSC, into = c('g1','g2'),sep = '-') %>%
+  mutate(scored=ifelse(flag=='HOMETEAM',as.numeric(g1),as.numeric(g2)),
+         conceded=ifelse(flag=='HOMETEAM',as.numeric(g2),as.numeric(g1)),
+        WL=ifelse(scored>conceded,'W',ifelse(scored<conceded,"L",'D')),
+        Points=ifelse(scored>conceded,3,ifelse(scored<conceded,0,1))) %>%
+    dplyr::select(-c(g1,g2))
+f <- f_long %>%
+  group_by(SEASON, COUNTRY, Team, WL) %>%
+  summarise(Total_Points = sum(Points), Matches = n(), scored = sum(scored),
+            conceded = sum(conceded)) %>%
+  group_by(SEASON, COUNTRY) %>%
+  spread(WL,Matches) %>%
+  group_by(SEASON, COUNTRY, Team) %>%
+  summarise(Scored=sum(scored), Conceded=sum(conceded),W=sum(W,na.rm = TRUE),
+            D=sum(D,na.rm = TRUE),L=sum(L,na.rm = TRUE),Total_Points=sum(Total_Points)) %>%
+  mutate(Position = dense_rank(desc(rank(Total_Points,ties.method = "first"))),
+         Matches=D+L+W)%>%
+  arrange(Position)
+```
+
+
+# Combined Measure of Home Team Advantage
+
+1-Combined Measure of Home Team Advantage (source:https://www.mdpi.com/2227-9091/8/3/87/pdf)
+  
+  
+  Combined measure of home advantage is random variable C that can take values −1, 0, and 1.
+C = −1 for team T1 if two matches between teams T1 and T2 in a season ended with a better result – measured by
+goal differences in matches – for team T1 away from home (at T2’s ground). C = 0 for team T1 if goal differences
+in both matches were exactly the same from T1’s point of view, and C = 1 for team T1 if this team recorded
+better result – measured by goal differences in matches – at its own ground. With results hT1: aT2 at the home ground of team T1 and hT2: aT1 at the home ground of team T2 the value of random variable C for team T1 is determined as
+           C = sgn((hT1 − aT2) − (aT1 − hT2)).
+           
+
+```{r}
+df <- f_data_sm %>% dplyr::select(SEASON, COUNTRY, HOMETEAM, AWAYTEAM, FTHG, FTAG) %>%
+  mutate(HW = 1)
+df2 <- df %>% mutate(team1 = AWAYTEAM, team2 = HOMETEAM, HW = 0) %>% dplyr::select(SEASON, COUNTRY, team1, team2, FTHG, FTAG, HW)
+df <-  df %>% rename(team1 = HOMETEAM , team2 = AWAYTEAM)
+df4 <- left_join(df, df2, by=c("SEASON", "COUNTRY","team1", "team2"))
+head(df4)
+```
+```{r}
+df4 <- df4 %>% mutate(C = sign((FTHG.x - FTAG.x) - (FTAG.y - FTHG.y))) %>% dplyr::select(SEASON, COUNTRY, team1, team2, C)
+df4 <- df4 %>% group_by(SEASON, COUNTRY, C) %>% summarise(count=n()) %>% drop_na() %>% spread(key = "C", value = "count")
+colnames(df4) <- c("SEASON", "COUNTRY", "k_1", "k0", "k1")
+ha_c <- df4 %>% mutate(k_1 = ifelse(is.na(k_1), 0, k_1),
+                      k0 = ifelse(is.na(k0), 0, k0),
+                      k1 = ifelse(is.na(k1), 0, k1)) %>% mutate(ha_c = 1 - pbeta(1/2, k1/(k_1+k0+k_1) + 1, k_1/(k_1+k0+k_1) + 1))
+```
+```{r}
+cb_ha <- ha_c %>% dplyr::select(SEASON, COUNTRY, ha_c)
+```
+
+# Bradley-Terry based Home Team Advantage
+
+The Bradley-Terry model is a probability model that assumes the outcome of a paired comparison. Given a pair of individuals i and j drawn from the same population, the odds that i beat j are ai/aj, where ai and aj are positive valued parameteres which represent the abilities of each team or player. 
+   P(i>j)= pi/(pi+pj)
+   A slight point worth mentioning that the model does not predict draws.
+   
+   
+```{r}
+f_bt <- f_data_sm %>% mutate(ht_w = ifelse(FTR == "H", 1,
+                                  ifelse(FTR == "D", 0.5, 0)),
+                             at_w = ifelse(FTR == "A", 1,
+                                  ifelse(FTR == "D", 0.5, 0)))
+```
+
+```{r}
+f_bt1 <- f_bt %>%
+  mutate(HOMETEAM = as.factor(HOMETEAM),
+         AWAYTEAM = as.factor(AWAYTEAM)) %>%
+  group_by(HOMETEAM, AWAYTEAM, SEASON)
+f_bt1$HOMETEAM <- data.frame(team = f_bt1$HOMETEAM, at.home = 1)
+f_bt1$AWAYTEAM <- data.frame(team = f_bt1$AWAYTEAM, at.home = 0)
+```
+
+
+```{r}
+f_bt1 <- f_bt1 %>% group_by(COUNTRY, SEASON)
+f_bt1 <- f_bt1 %>% do(ha = coefficients(BTm(cbind(ht_w, at_w), HOMETEAM, AWAYTEAM, formula = ~team + at.home, data = ., id="team"))["at.home"])
+f_bt2 <- f_bt1
+f_bt1$ha <- flatten_dbl(f_bt1$ha)
+head(f_bt1)
+```
+```{r}
+f_bt1 <- f_bt1 %>% rename("ha_bt" = "ha")
+```
+
+```{r}
+cb_ha <- left_join(cb_ha, f_bt1, by = c("COUNTRY", "SEASON"))
+head(cb_ha)
+```
+
+# Poisson Model based Home Team Advantage
+The Poisson model is discrete probability distribution that expresses the probability of a given number of events occurring in a fixed interval of time.We use the Poisson regression which is part of the Generalized Linear Regression models family, We estimate the lambda so we can generate a poisson distribution and cal'
+
+```{r}
+league <- f_data_sm %>%
+  group_by(COUNTRY, SEASON) %>%
+  dplyr::select(SEASON, COUNTRY, HOMETEAM, AWAYTEAM, FTHG, FTAG)
+l1 <- data.frame(league[, c("SEASON","COUNTRY", "HOMETEAM", "AWAYTEAM", "FTHG")], Home = 1)
+l2 <- data.frame(league[, c("SEASON","COUNTRY", "AWAYTEAM", "HOMETEAM", "FTAG")], Home = 0)
+colnames(l1) <- c("SEASON","COUNTRY", "Team", "Opponent", "Goal", "Home")
+colnames(l2) <- c("SEASON","COUNTRY", "Team", "Opponent", "Goal", "Home")
+l2 <- rbind(l1, l2)
+```
+
+```{r}
+l2 <- l2 %>% group_by(SEASON, COUNTRY) %>%
+  do(ha_pois = exp(coefficients(glm(Goal ~ Team + Opponent + Home, data = ., family=poisson(link=log)))["Home"]))
+l2$ha_pois <- flatten_dbl(l2$ha_pois)
+```
+
+```{r}
+cb_ha <- left_join(cb_ha, l2, by = c("COUNTRY", "SEASON"))
+head(cb_ha)
+```
+
+```{r}
+# ggplot(cb_ha, aes(ha_pois, ha_bt))+geom_point()+facet_wrap(~COUNTRY, nrow=3)
+```
+```{r echo=TRUE, include=TRUE}
+ggplot(cb_ha, aes(ha_pois, ha_c))+geom_point()+facet_wrap(~COUNTRY, nrow=3)
+```
+```{r}
+# ggplot(cb_ha, aes(ha_bt, ha_c))+geom_point()+facet_wrap(~COUNTRY, nrow=3)
+```
+# Competitive balance
+Now we will calculate the competitive balance with a few methods, starting with Entropy
+
+
+# Entropy
+ https://link.springer.com/content/pdf/10.1023/A:1007799730191.pdf 
+ 
+Horowitz (1997) chose to use the relative-entropy measure of information theory to measure seasonal
+competitive balance
+
+  Similarly, the minimum entropy or uncertainty about which team might have won
+a game selected at random from the schedule, is achieved when the best team wins all games. Relative entropy, R = H=HM, measures the degree of uncertainty about which
+team might have won a randomly-selected game, relative to the maximum uncertainty possible.
+  
+
+```{r}
+f <- f %>% mutate(Wpct = Total_Points/3/Matches, Wpct = Wpct/sum(Wpct))
+```
+
+```{r}
+H <- f %>% group_by(SEASON, COUNTRY) %>% summarize(H = -sum(Wpct * log2(Wpct + 10^(-10))), n = n())
+H <- H %>% mutate(Hm = -n * 1/n * log2(1/n))
+H <- H %>% mutate(cb_entropy = H / Hm) %>% dplyr::select(SEASON, COUNTRY, cb_entropy)
+H
+```
+```{r}
+cb_ha <- left_join(cb_ha, H, by = c("COUNTRY", "SEASON"))
+head(cb_ha)
+```
+
+# Surprise Index
+The Surprise Index was introduced by Groot and Groot (2003)- for reference-https://ideas.repec.org/p/ant/wpaper/2005034.html,
+it is the ratio between P, the realized surprise points and M, the maximum number of
+surprise points that is possible when the teams are perfectly balanced10. Two surprise points are given
+when a team looses from a lower ranked team and one point is awarded when the game ends in a tie.
+These points are weighted with the rank difference. 
+
+```{r}
+data <- f_data_sm %>% 
+  left_join(dplyr::select(f, SEASON, COUNTRY, Team, Position), by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY", "HOMETEAM" = "Team")) %>%
+  rename(HTP = Position)
+data <- data %>% 
+  left_join(dplyr::select(f, SEASON, COUNTRY, Team, Position), by = c("SEASON" = "SEASON", "COUNTRY" = "COUNTRY", "AWAYTEAM" = "Team")) %>%
+  rename(ATP = Position)
+data <- data %>% mutate(Surprise_Points = ifelse((FTR == 'A' & HTP < ATP) | (FTR == 'H' & HTP > ATP), 2,
+                                         ifelse(FTR == 'D' , 1, 0)))
+data <- data %>% mutate(Surprise_Points = Surprise_Points*abs(HTP-ATP))
+```
+
+```{r}
+sp <- data %>% group_by(SEASON, COUNTRY) %>% summarize(Surprise_Points = sum(Surprise_Points))
+sp <- sp %>% left_join(f %>% group_by(SEASON, COUNTRY) %>% summarise(N = n()))
+sp <- sp %>% mutate(M = (N - 1) * N * (N + 1) / 3)
+sp <- sp %>% mutate(cb_s = Surprise_Points/M) %>% dplyr::select(SEASON, COUNTRY, cb_s)
+```
+```{r}
+head(sp)
+```
+
+```{r}
+cb_ha <- left_join(cb_ha, sp, by = c("COUNTRY", "SEASON"))
+head(cb_ha)
+```
+
+# Gini Competitive Balance
+```{r}
+Gini <- f %>% group_by(SEASON, COUNTRY) %>% summarize(cb_gini = gini(Wpct))
+Gini
+```
+
+```{r}
+cb_ha <- left_join(cb_ha, Gini, by = c("COUNTRY", "SEASON"))
+head(cb_ha)
+```
+
+```{r}
+ggplot(cb_ha, aes(cb_gini, cb_s))+geom_point()+facet_wrap(~COUNTRY, nrow=3)
+```
+
+# Calculating HHI and Noll-Scully
+```{r}
+head(f)
+```
+
+```{r}
+adj_HHI <- f %>%
+  group_by(SEASON, COUNTRY) %>%
+  mutate(Perc = Wpct / sum(Wpct)) %>%
+  summarise(id_s = 0.5/sqrt(n()),  cb_hhi = sum(Perc^2)-1/n(), cb_ns = sd(Perc)/id_s) %>% dplyr::select(-id_s)
+head(adj_HHI)
+```
+
+```{r}
+cb_ha <- left_join(cb_ha, adj_HHI, by = c("COUNTRY", "SEASON"))
+head(cb_ha)
+```
+```{r}
+cb_ha <- cb_ha %>% dplyr::select(-c(cb_hhi.x, cb_hhi.y, cb_ns.x, cb_ns.y))
+```
+
+
+```{r echo=TRUE, include=TRUE}
+fig <- plot_ly(cb_ha, x = ~-1*cb_hhi, y = ~ha_pois, alpha = 3)
+fig <- fig %>% add_markers(marker = list(line = list(color = "black", width = 0.5)))
+fig <- fig %>% layout(
+  title = "HHI vs HA Drop-Down",
+  yaxis = list(title = "y"),
+  updatemenus = list(
+    list(
+      y = 0.8,
+      buttons = list(
+        list(method = "restyle",
+             args = list( "y", list(~ha_pois)),
+             label = "HA with Pois"),
+        list(method = "restyle",
+             args = list("y",list(~ha_bt)),
+             label = "HA with BT"),
+        
+        list(method = "restyle",
+             args = list("y",list(~ha_c)),
+             label = "HA with C")
+        
+        )),
+      
+      list(
+        y = 0.9,
+        buttons = list(
+  
+          list(method = "restyle",
+               args = list( "x", list(~cb_hhi)),
+               label = "CB with Adj HHI"),
+  
+          list(method = "restyle",
+               args = list("x",list(~cb_entropy)),
+               label = "CB with Entropy"),
+          
+          list(method = "restyle",
+               args = list( "x", list(~cb_s)),
+               label = "CB with Surprise Index"),
+  
+          list(method = "restyle",
+               args = list("x",list(~cb_gini)),
+               label = "CB with Gini coef"),
+          
+          list(method = "restyle",
+               args = list( "x", list(~cb_ns)),
+               label = "CB with Noll-Scully")
+          
+          )
+      
+      )
+    
+    )
+  )
+fig
+```
