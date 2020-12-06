@@ -4,8 +4,6 @@ output:
   pdf_document: default
 title: "Competitive Balance and Home Team Advantage"
 author: "Aram Sargsyan, Ashot Janibekyan, Barsegh Atanyan, Sarin Sulahian"
-# toc: yes 
-# toc_depth: '3'
 runtime: shiny
 ---
 
@@ -14,60 +12,98 @@ knitr::opts_chunk$set(include=F, error=F, warning=F)
 ```
 
 ```{r}
-libs<-c("caret","tidyr", "ggplot2", "knitr", "dplyr", "purrr", "MASS", "BradleyTerry2", "devtools", "reldist", "shiny", "scales", "corrplot")
-#load libs, install missing libs
-load_libraries<-function(libs){
-  new_libs <- libs[!(libs %in% installed.packages()[,"Package"])]
-  if(length(new_libs)>0) {install.packages(new_libs)}
-  lapply(libs, library, character.only = TRUE)
-} 
-load_libraries(libs)
-install_github("HABET/CSE270")
-library("SportsAnalytics270")
+# libs<-c("caret","tidyr", "ggplot2", "knitr", "dplyr", "purrr", "MASS", "BradleyTerry2", "devtools", "reldist", "shiny", "scales", "corrplot")
+# #load libs, install missing libs
+# load_libraries<-function(libs){
+#   new_libs <- libs[!(libs %in% installed.packages()[,"Package"])]
+#   if(length(new_libs)>0) {install.packages(new_libs)}
+#   lapply(libs, library, character.only = TRUE)
+# } 
+# load_libraries(libs)
+# install_github("HABET/CSE270")
+# library("SportsAnalytics270")
+
+# install.packages("caret")
+library(caret)
+
+# install.packages("tidyr")
+library(tidyr)
+
+# install.packages("ggplot2")
+library(ggplot2)
+
+# install.packages("knitr")
+library(knitr)
+
+# install.packages("dplyr")
+library(dplyr)
+
+# install.packages("purrr")
+library(purrr)
+
+# install.packages("MASS")
+library(MASS)
+
+# install.packages("BradleyTerry2")
+library(BradleyTerry2)
+# install.packages("reldist")
+library(reldist)
+# install.packages("shiny")
+library(shiny)
+# install.packages("scales")
+library(scales)
+# install.packages("corrplot")
+library(corrplot)
+# install_github("HABET/CSE270")
+# library("SportsAnalytics270")
 
 ```
 
 ```{r}
-
-addData <- function(country, league, startYear, endYear){
-  combined <- data.frame()
-  for(y in startYear:endYear){
-    path <- paste0('data/', league, '/', league, y, '.csv')
-    data <- read.csv(path)  
-    data <- data %>% dplyr::select(HomeTeam, AwayTeam, FTHG, FTAG, FTR) %>% 
-      rename(HOMETEAM = HomeTeam, AWAYTEAM = AwayTeam) %>% 
-      mutate(SEASON = y, COUNTRY = country, LEAGUE = league, FTSC = paste0(FTHG, "-", FTAG), FTTG = FTHG + FTAG)
-    
-    combined <- rbind(combined, data)  
-  }
-  
-  return(combined)
-}
+# 
+# addData <- function(country, league, startYear, endYear){
+#   combined <- data.frame()
+#   for(y in startYear:endYear){
+#     path <- paste0('data/', league, '/', league, y, '.csv')
+#     data <- read.csv(path)
+#     data <- data %>% dplyr::select(HomeTeam, AwayTeam, FTHG, FTAG, FTR) %>%
+#       rename(HOMETEAM = HomeTeam, AWAYTEAM = AwayTeam) %>%
+#       mutate(SEASON = y, COUNTRY = country, LEAGUE = league, FTSC = paste0(FTHG, "-", FTAG), FTTG = FTHG + FTAG)
+# 
+#     combined <- rbind(combined, data)
+#   }
+# 
+#   return(combined)
+# }
 
 ```
 
 
 ```{r}
-data <- f_data_sm %>% dplyr::select(-c("H", "D", "A", "DATE")) 
-data <- data %>% mutate(LEAGUE = ifelse(COUNTRY == "Scotland", "Scotland Premier League", LEAGUE)) 
+# data <- f_data_sm %>% dplyr::select(-c("H", "D", "A", "DATE"))
+# data <- data %>% mutate(LEAGUE = ifelse(COUNTRY == "Scotland", "Scotland Premier League", LEAGUE))
+# 
+# championship <- addData("England", "Championship", 2005, 2020)
+# data <- rbind(data, championship)
+# 
+# bundesliga2 <- addData("Germany", "Bundesliga2", 1994, 2020)
+# data <- rbind(data, bundesliga2)
+# 
+# serieB <- addData("Italy", "SerieB", 1998, 2018)
+# data <- rbind(data, serieB)
+# 
+# segunda <- addData("Spain", "Segunda", 1997, 2020)
+# data <- rbind(data, segunda)
+# 
+# ligue2 <- addData("France", "Ligue2", 1997, 2020)
+# data <- rbind(data, ligue2)
+# 
+# data <- data %>% drop_na()
 
-championship <- addData("England", "Championship", 2005, 2020)
-data <- rbind(data, championship)
+```
 
-bundesliga2 <- addData("Germany", "Bundesliga2", 1994, 2020)
-data <- rbind(data, bundesliga2)
-
-serieB <- addData("Italy", "SerieB", 1998, 2018)
-data <- rbind(data, serieB)
-
-segunda <- addData("Spain", "Segunda", 1997, 2020)
-data <- rbind(data, segunda)
-
-ligue2 <- addData("France", "Ligue2", 1997, 2020)
-data <- rbind(data, ligue2)
-
-data <- data %>% drop_na()
-
+```{r}
+data <- read.csv("./data.csv")
 ```
 
 
@@ -512,5 +548,7 @@ Let us conclude our analysis on the home team advantage and the competitive bala
 \newpage
 #### Sources
 https://www.mdpi.com/2227-9091/8/3/87/pdf
+
 http://www.investopedia.com/terms/h/hhi.asp#ixzz4t8sTjDns
+
 https://link.springer.com/content/pdf/10.1023/A:1007799730191.pdf 
