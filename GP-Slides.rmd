@@ -298,7 +298,7 @@ p
 - The relative-entropy measure of information theory is also used to measure seasonal competitive balance (Horowitz, 1997)
 
 - Similarly, the minimum entropy or uncertainty about which team might have won
-a game selected at random from the schedule, is achieved when the best team wins all games. Relative entropy, $R = \frac{H}{HM}$, measures the degree of uncertainty about which team might have won a randomly-selected game, relative to the maximum uncertainty possible.
+a game selected at random from the schedule, is achieved when the best team wins all games. Relative entropy, $R = \frac{H}{H_M}$, measures the degree of uncertainty about which team might have won a randomly-selected game, relative to the maximum uncertainty possible.
 
 \indent $$R = \frac{\sum_{i=1}^{n} p_i\log_2(p_i)}{\sum_{i=1}^{n} \frac{1}{n}\log_2(\frac{1}{n})}$$  
 
