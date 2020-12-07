@@ -447,13 +447,13 @@ K. Goossens. Competitive Balance in European Football. Retrieved from https://bi
 ## 
 
 ```{css include=T, echo=F}
-h1 {
+h6 {
   font-size: 60px;
   padding: 200px;
   text-align: center;
 }
 ```
 \vspace{10cm}
-<div class="black", font-size=70px><center><h1> Thank you! </h1></center></div>
+<div class="black", font-size=70px><center><h6> Thank you! </h6></center></div>
 
 
