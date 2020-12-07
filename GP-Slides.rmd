@@ -35,7 +35,7 @@ would tell if playing at home matters more or less in competitive leagues.
 
 
 ```{r setup, include=F}
-knitr::opts_chunk$set(include=F, error=F, warning=F)
+knitr::opts_chunk$set(echo = T, include=F)
 ```
 
 ```{r}
@@ -53,46 +53,7 @@ library("SportsAnalytics270")
 ```
 
 ```{r}
-
-addData <- function(country, league, startYear, endYear){
-  combined <- data.frame()
-  for(y in startYear:endYear){
-    path <- paste0('data/', league, '/', league, y, '.csv')
-    data <- read.csv(path)  
-    data <- data %>% dplyr::select(HomeTeam, AwayTeam, FTHG, FTAG, FTR) %>% 
-      rename(HOMETEAM = HomeTeam, AWAYTEAM = AwayTeam) %>% 
-      mutate(SEASON = y, COUNTRY = country, LEAGUE = league, FTSC = paste0(FTHG, "-", FTAG), FTTG = FTHG + FTAG)
-    
-    combined <- rbind(combined, data)  
-  }
-  
-  return(combined)
-}
-
-```
-
-
-```{r}
-data <- f_data_sm %>% dplyr::select(-c("H", "D", "A", "DATE")) 
-data <- data %>% mutate(LEAGUE = ifelse(COUNTRY == "Scotland", "Scotland Premier League", LEAGUE)) 
-
-championship <- addData("England", "Championship", 2005, 2020)
-data <- rbind(data, championship)
-
-bundesliga2 <- addData("Germany", "Bundesliga2", 1994, 2020)
-data <- rbind(data, bundesliga2)
-
-serieB <- addData("Italy", "SerieB", 1998, 2018)
-data <- rbind(data, serieB)
-
-segunda <- addData("Spain", "Segunda", 1997, 2020)
-data <- rbind(data, segunda)
-
-ligue2 <- addData("France", "Ligue2", 1997, 2020)
-data <- rbind(data, ligue2)
-
-data <- data %>% drop_na()
-
+data <- read.csv("./data.csv")
 ```
 
 
@@ -148,7 +109,7 @@ We use the Poisson regression which is part of the Generalized Linear Regression
 
 Log link: $\log{(\lambda}) = \beta_0 + \beta_1 \cdot x_1 + \beta_2 \cdot x_2 +\ ...\ + \beta_n \cdot x_n$ or $\lambda = e^{\beta_0 + \beta_1 \cdot x_1 + \beta_2 \cdot x_2 +\ ...\ + \beta_n \cdot x_n}$
 
-Note: We assume that variables are independent based past research using the $chi^2$ test.
+Note: We assume that variables are independent based past research using the $\chi^2$ test.
 ```{r}
 league <- data %>%
   group_by(COUNTRY, SEASON, LEAGUE) %>%
@@ -175,7 +136,7 @@ cb_ha <- l2 %>% dplyr::select(SEASON, COUNTRY, LEAGUE, ha_pois)
 
 
 
-## Combined Measure of Home Team Advantage based based on Beta Distribution
+## Combined Measure of Home Team Advantage based on Beta Distribution
 
   
 Combined measure of home advantage is random variable C that can take values $-1$, $0$, and $1$.
@@ -297,8 +258,7 @@ p
 
 - The relative-entropy measure of information theory is also used to measure seasonal competitive balance (Horowitz, 1997)
 
-- Similarly, the minimum entropy or uncertainty about which team might have won
-a game selected at random from the schedule, is achieved when the best team wins all games. Relative entropy, $R = \frac{H}{H_M}$, measures the degree of uncertainty about which team might have won a randomly-selected game, relative to the maximum uncertainty possible.
+- Relative entropy, $R = \frac{H}{H_M}$, measures the degree of uncertainty about which team might have won a randomly-selected game, relative to the maximum uncertainty possible.
 
 \indent $$R = \frac{\sum_{i=1}^{n} p_i\log_2(p_i)}{\sum_{i=1}^{n} \frac{1}{n}\log_2(\frac{1}{n})}$$  
 
@@ -476,9 +436,24 @@ The best correlations were seen in leagues Le Championnat and League 2.
 [https://mev6zxu4yxgkxytg.shinyapps.io/GPPP/]
 
 ## References 
-https://www.mdpi.com/2227-9091/8/3/87/pdf
-http://www.investopedia.com/terms/h/hhi.asp#ixzz4t8sTjDns
-https://link.springer.com/content/pdf/10.1023/A:1007799730191.pdf 
+P. Marek, F. Vávra. Comparison of Home Advantage in European Football Leagues (2020). Retrieved from https://bit.ly/3qv6fNX
 
-## Thank You
+I. Horowitz, The Increasing Competitive Balance in Major League Baseball (1997). Retrieved from https://bit.ly/3lPFuAe
+
+M. Schmidt, D. Berri. Competitive Balance and Attendance: The Case of Major League Baseball (2001). Retrieved from https://bit.ly/37KSC4F
+
+K. Goossens. Competitive Balance in European Football. Retrieved from https://bit.ly/2K0UMVC
+
+## 
+
+```{css include=T, echo=F}
+h1 {
+  font-size: 60px;
+  padding: 200px;
+  text-align: center;
+}
+```
+\vspace{10cm}
+<div class="black", font-size=70px><center><h1> Thank you! </h1></center></div>
+
 
